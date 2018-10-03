@@ -22,4 +22,6 @@ executable blog
         lucid,
         filepath,
         directory,
-        http-types
+        http-types,
+        time,
+        casing

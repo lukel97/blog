@@ -4,10 +4,15 @@ module Main where
 import Web.Scotty
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
+import Data.List
+import Data.Time
+import Data.Maybe
+import Data.Ord
 import Control.Monad.IO.Class
 import Control.Monad
 import qualified Text.MMark as M
 import qualified Text.MMark.Extension.Common as M
+import Text.Casing
 import Lucid
 import Lucid.Base
 import System.Directory
@@ -19,18 +24,23 @@ main = scotty 3000 $ do
   get "/style.css" $ file "style.css"
 
   get "/create" $ html $ renderText $ html_ $ do
-    head_ style
-    body_ $ with form_ [action_ "create", method_ "post"] $ do
-      input_ [name_ "title", type_ "text"]
-      with textarea_ [name_ "body", placeholder_ "body"] ""
-      input_ [type_ "submit"]
+    head_ $ do
+      title_ "Create"
+      style
+    body_ $ do
+      h1_ "Create a new post"
+      with form_ [action_ "create", method_ "post"] $ do
+        input_ [name_ "title", type_ "text", placeholder_ "Title"]
+        br_ []
+        with textarea_ [name_ "body", placeholder_ "# Your markdown here"] ""
+        br_ []
+        input_ [type_ "submit"]
 
   post "/create" $ do
-    title <- param "title"
-    body <- param "body"
-    let fp = "posts" </> T.unpack title <.> "md"
-    liftIO $ T.writeFile fp body
-    redirect ("post/" <> title)
+    t <- param "title"
+    b <- param "body"
+    p <- liftIO $ save b t
+    redirect ("post/" <> title p)
 
   post "/login" $ do
     username <- param "username"
@@ -40,33 +50,75 @@ main = scotty 3000 $ do
       else redirect "/create"
 
   get "/" $ do
-    posts <- fmap dropExtension <$> liftIO (listDirectory "posts")
-    contents <- mapM render posts
+    posts <- liftIO $ do
+      names <- listDirectory "posts"
+      let files = ("posts" </>) <$> names
+      posts <- catMaybes <$> mapM load files
+      return $ take 5 $ sortOn (Down . date) posts
     html $ renderText $ html_ $ do
-      head_ style
+      head_ $ style >> title_ "Cool Blog"
       body_ $ do
+        p_ $ a_ [href_ "/"] "Cool Blog"
         with form_ [action_ "/login", method_ "post"] $ do
-          input_ [name_ "username", placeholder_ "username", type_ "text"]
-          input_ [name_ "password", placeholder_ "password", type_ "password"]
+          input_ [name_ "username", placeholder_ "Username", type_ "text"]
+          input_ [name_ "password", placeholder_ "Password", type_ "password"]
           input_ [type_ "submit"]
-        sequence contents
+        sequence (mapMaybe render posts)
 
-
-  get "/post/:post" $ do
-    post <- param "post"
-    content <- render post
-    html $ renderText $ html_ $ do
-      head_ style
-      body_ content
+  get "/posts/:post" $ do
+    name <- param "post"
+    mPost <- liftIO $ load ("posts" </> name <.> "md")
+    case mPost of
+      Nothing -> status notFound404
+      Just post ->
+        case render post of
+          Nothing -> status internalServerError500
+          Just content ->
+            html $ renderText $ html_ $ do
+              head_ $ style >> title_ "Post"
+              body_ $ do
+                p_ $ a_ [href_ "/"] "Home"
+                content
 
   where
-    style = link_ [Attribute "rel" "stylesheet", Attribute "href" "style.css"]
+    style = link_ [Attribute "rel" "stylesheet", Attribute "href" "/style.css"]
 
-render :: String -> ActionM (Html ())
-render post = do
-  let name = "posts" </> post <.> ".md"
-  markdown <- T.toStrict <$> liftIO (T.readFile name)
-  case M.parse name markdown of
-    Left e -> return "shit"
-    Right doc -> return $ M.render (M.useExtensions extensions doc)
+data Post = Post
+          { markdown :: T.Text
+          , title    :: T.Text
+          , date     :: UTCTime
+          }
+
+load :: FilePath -> IO (Maybe Post)
+load file = do
+  liftIO $ guard (takeExtension file == ".md")
+  md <- liftIO (T.readFile file)
+  modTime <- getModificationTime file
+  let title = T.pack $ takeBaseName file
+  return $ Just (Post md title modTime)
+
+render :: Post -> Maybe (Html ())
+render p@(Post markdown title date) =
+  case M.parse (pathToPost p) (T.toStrict markdown) of
+    Left e -> Nothing
+    Right doc -> Just $
+      with div_ [id_ (T.toStrict title)] $ do
+        with a_ [href_ (T.toStrict $ linkToPost p)] $
+          i_ $ toHtml $ formatTime defaultTimeLocale "%a %e %B %Y" date
+        br_ []
+        M.render (M.useExtensions extensions doc)
   where extensions = [M.ghcSyntaxHighlighter, M.skylighting, M.footnotes]
+
+linkToPost :: Post -> T.Text
+linkToPost p = T.pack $ "/posts" </> T.unpack (title p)
+
+pathToPost :: Post -> FilePath
+pathToPost p = "posts" </> T.unpack (title p) <.> "md"
+
+save :: T.Text -> T.Text -> IO Post
+save md title = do
+  curTime <- getCurrentTime
+  let kTitle = T.pack $ kebab $ T.unpack title
+      p = Post md kTitle curTime
+  T.writeFile (pathToPost p) (markdown p)
+  return p
