@@ -1,0 +1,25 @@
+cabal-version: >=1.10
+name: blog
+version: 0.1.0.0
+license: BSD3
+license-file: LICENSE
+maintainer: luke_lau@icloud.com
+author: Luke Lau
+category: Web
+build-type: Simple
+extra-source-files:
+    CHANGELOG.md
+
+executable blog
+    main-is: Main.hs
+    default-language: Haskell2010
+    build-depends:
+        base >=4.11,
+        scotty,
+        text,
+        mmark,
+        mmark-ext,
+        lucid,
+        filepath,
+        directory,
+        http-types

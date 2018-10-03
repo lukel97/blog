@@ -1,0 +1,69 @@
+body {
+    font-family: sans-serif;
+}
+
+.source-code .dt {
+    color: #6f42c1
+}
+
+.source-code .dv {
+    color: #fd7e14
+}
+
+.source-code .cf {
+    font-weight: 700;
+    color: #2727af
+}
+
+.source-code .bn {
+    color: #17a2b8
+}
+
+.source-code .fu {
+    color: #007bff
+}
+
+.source-code .kw {
+    font-weight: 700;
+    color: #2727af
+}
+
+.source-code .pr {
+    color: #dc3545
+}
+
+.source-code .sy {
+    color: #e83e8c
+}
+
+.source-code .va {
+    color: #007bff
+}
+
+.source-code .cr {
+    color: #6f42c1
+}
+
+.source-code .op {
+    color: #2727af
+}
+
+.source-code .ch {
+    color: #17a2b8
+}
+
+.source-code .st {
+    color: #20c997
+}
+
+.source-code .it {
+    color: #fd7e14
+}
+
+.source-code .ra {
+    color: #fd7e14
+}
+
+.source-code .co {
+    color: #6c757d
+}

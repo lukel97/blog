@@ -1,0 +1,6 @@
+dist
+dist-newstyle
+.stack-work
+.ghc.environment*
+*.swp
+*.swo
