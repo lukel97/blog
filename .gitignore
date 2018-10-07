@@ -4,3 +4,5 @@ dist-newstyle
 .ghc.environment*
 *.swp
 *.swo
+posts
+.DS_Store

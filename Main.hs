@@ -13,6 +13,7 @@ import Control.Monad
 import qualified Text.MMark as M
 import qualified Text.MMark.Extension.Common as M
 import Text.Casing
+import Text.Read (readMaybe)
 import Lucid
 import Lucid.Base
 import System.Directory
@@ -40,7 +41,7 @@ main = scotty 3000 $ do
     t <- param "title"
     b <- param "body"
     p <- liftIO $ save b t
-    redirect ("post/" <> title p)
+    redirect ("posts/" <> title p)
 
   post "/login" $ do
     username <- param "username"
@@ -51,8 +52,7 @@ main = scotty 3000 $ do
 
   get "/" $ do
     posts <- liftIO $ do
-      names <- listDirectory "posts"
-      let files = ("posts" </>) <$> names
+      files <- listDirectory "posts"
       posts <- catMaybes <$> mapM load files
       return $ take 5 $ sortOn (Down . date) posts
     html $ renderText $ html_ $ do
@@ -67,7 +67,7 @@ main = scotty 3000 $ do
 
   get "/posts/:post" $ do
     name <- param "post"
-    mPost <- liftIO $ load ("posts" </> name <.> "md")
+    mPost <- liftIO (load name) 
     case mPost of
       Nothing -> status notFound404
       Just post ->
@@ -87,15 +87,13 @@ data Post = Post
           { markdown :: T.Text
           , title    :: T.Text
           , date     :: UTCTime
-          }
+          } deriving (Read, Show)
 
-load :: FilePath -> IO (Maybe Post)
-load file = do
-  liftIO $ guard (takeExtension file == ".md")
-  md <- liftIO (T.readFile file)
-  modTime <- getModificationTime file
-  let title = T.pack $ takeBaseName file
-  return $ Just (Post md title modTime)
+load :: String -> IO (Maybe Post)
+load name = do
+  let file = "posts" </> name
+  guard =<< doesFileExist file
+  readMaybe <$> readFile file
 
 render :: Post -> Maybe (Html ())
 render p@(Post markdown title date) =
@@ -104,21 +102,22 @@ render p@(Post markdown title date) =
     Right doc -> Just $
       with div_ [id_ (T.toStrict title)] $ do
         with a_ [href_ (T.toStrict $ linkToPost p)] $
-          i_ $ toHtml $ formatTime defaultTimeLocale "%a %e %B %Y" date
+          h1_ $ toHtml title
+        i_ $ toHtml $ formatTime defaultTimeLocale "%a %e %B %Y" date
         br_ []
         M.render (M.useExtensions extensions doc)
   where extensions = [M.ghcSyntaxHighlighter, M.skylighting, M.footnotes]
 
 linkToPost :: Post -> T.Text
-linkToPost p = T.pack $ "/posts" </> T.unpack (title p)
+linkToPost p = T.pack $ "/posts" </> kebab (T.unpack (title p))
 
 pathToPost :: Post -> FilePath
-pathToPost p = "posts" </> T.unpack (title p) <.> "md"
+pathToPost p = "posts" </> kebab (T.unpack (title p))
 
 save :: T.Text -> T.Text -> IO Post
 save md title = do
   curTime <- getCurrentTime
   let kTitle = T.pack $ kebab $ T.unpack title
       p = Post md kTitle curTime
-  T.writeFile (pathToPost p) (markdown p)
+  writeFile (pathToPost p) (show p)
   return p
