@@ -16,6 +16,7 @@ executable blog
     build-depends:
         base >=4.11,
         scotty,
+        scotty-cookie,
         text,
         mmark,
         mmark-ext,
@@ -24,4 +25,7 @@ executable blog
         directory,
         http-types,
         time,
-        casing
+        casing,
+        transformers,
+        containers,
+        random

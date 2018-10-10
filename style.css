@@ -2,6 +2,13 @@ body {
     font-family: sans-serif;
 }
 
+blockquote {
+    color: darkgray;
+    font-style: italic;
+    border-left: 0.25em solid darkgray;
+    padding-left: 1em;
+}
+
 .source-code .dt {
     color: #6f42c1
 }
