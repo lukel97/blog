@@ -74,12 +74,12 @@ main = do
       if authed
         then template "Create" $ do
           h1_ "Create a new post"
-          with form_ [action_ "create", method_ "post"] $ do
+          form_ [action_ "create", method_ "post"] $ do
             input_ [name_ "title", type_ "text", placeholder_ "Title"]
             br_ []
-            with textarea_ [name_ "body", placeholder_ "# Your markdown here"] ""
+            textarea_ [name_ "body", placeholder_ "# Your markdown here"] ""
             br_ []
-            input_ [type_ "submit"]
+            input_ [type_ "submit", value_ "Post"]
         else status unauthorized401
 
     post "/create" $ do
@@ -128,13 +128,13 @@ template title content = do
         a_ [href_ "/"] "🏠 Cool Blog"
         if authed
           then do
-            a_ [href_ "/create"] "Create a Post"
-            with form_ [action_ "/logout", method_ "post", class_ "login-form"] $
+            "   " >> a_ [href_ "/create"] "Create a Post"
+            form_ [action_ "/logout", method_ "post", class_ "login-form"] $
               input_ [type_ "submit", value_ "Log Out"]
-          else with form_ [action_ "/login", method_ "post", class_ "login-form"] $ do
+          else form_ [action_ "/login", method_ "post", class_ "login-form"] $ do
             input_ [name_ "username", placeholder_ "Username", type_ "text"]
             input_ [name_ "password", placeholder_ "Password", type_ "password"]
-            input_ [type_ "submit"]
+            input_ [type_ "submit", value_ "Log In"]
       content
   where style = link_ [Attribute "rel" "stylesheet", Attribute "href" "/style.css"]
 
@@ -156,12 +156,12 @@ render p@(Post markdown title date author) =
   case M.parse (pathToPost p) (T.toStrict markdown) of
     Left e -> Nothing
     Right doc -> Just $
-      with article_ [id_ (T.toStrict title)] $ do
+      article_ [id_ (T.toStrict title)] $ do
         header_ $ do
-          with a_ [href_ (T.toStrict $ linkToPost p)] $
+          a_ [href_ (T.toStrict $ linkToPost p)] $
             h1_ $ toHtml title
           address_ $ "By " >> toHtml author
-          with time_ [datetime_ (T.toStrict $ T.pack (show date))] $ toHtml dateStr
+          time_ [datetime_ (T.toStrict $ T.pack (show date))] $ toHtml dateStr
         M.render (M.useExtensions extensions doc)
   where extensions = [M.ghcSyntaxHighlighter, M.skylighting, M.footnotes]
         dateStr = T.pack $ formatTime defaultTimeLocale "%a %e %B %Y" date
