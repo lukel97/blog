@@ -1,5 +1,13 @@
 body {
     font-family: sans-serif;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 1em;
+}
+
+.login-form {
+    display: inline;
+    float: right;
 }
 
 blockquote {

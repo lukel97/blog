@@ -72,18 +72,14 @@ main = do
     get "/create" $ do
       authed <- loggedIn
       if authed
-        then html $ renderText $ html_ $ do
-          head_ $ do
-            title_ "Create"
-            style
-          body_ $ do
-            h1_ "Create a new post"
-            with form_ [action_ "create", method_ "post"] $ do
-              input_ [name_ "title", type_ "text", placeholder_ "Title"]
-              br_ []
-              with textarea_ [name_ "body", placeholder_ "# Your markdown here"] ""
-              br_ []
-              input_ [type_ "submit"]
+        then template "Create" $ do
+          h1_ "Create a new post"
+          with form_ [action_ "create", method_ "post"] $ do
+            input_ [name_ "title", type_ "text", placeholder_ "Title"]
+            br_ []
+            with textarea_ [name_ "body", placeholder_ "# Your markdown here"] ""
+            br_ []
+            input_ [type_ "submit"]
         else status unauthorized401
 
     post "/create" $ do
@@ -106,26 +102,11 @@ main = do
     post "/logout" $ deleteCookie "session" >> redirect "/"
 
     get "/" $ do
-      authed <- loggedIn
       posts <- liftIO $ do
         files <- listDirectory "posts"
         posts <- catMaybes <$> mapM load files
         return $ take 5 $ sortOn (Down . date) posts
-      html $ renderText $ html_ $ do
-        head_ $ style >> title_ "Cool Blog"
-        body_ $ do
-          p_ $ a_ [href_ "/"] "Cool Blog"
-          if authed
-            then do
-              a_ [href_ "/create"] "Create a Post"
-              br_ []
-              with form_ [action_ "/logout", method_ "post"] $
-                input_ [type_ "submit", value_ "Log Out"]
-            else with form_ [action_ "/login", method_ "post"] $ do
-              input_ [name_ "username", placeholder_ "Username", type_ "text"]
-              input_ [name_ "password", placeholder_ "Password", type_ "password"]
-              input_ [type_ "submit"]
-          sequence (mapMaybe render posts)
+      template "Cool blog" $ sequence (mapMaybe render posts)
 
     get "/posts/:post" $ do
       name <- param "post"
@@ -135,14 +116,27 @@ main = do
         Just post ->
           case render post of
             Nothing -> status internalServerError500
-            Just content ->
-              html $ renderText $ html_ $ do
-                head_ $ style >> title_ "Post"
-                body_ $ do
-                  p_ $ a_ [href_ "/"] "Home"
-                  content
+            Just content -> template (title post) content
 
-style = link_ [Attribute "rel" "stylesheet", Attribute "href" "/style.css"]
+template :: T.Text -> Html a -> ActionM ()
+template title content = do
+  authed <- loggedIn
+  html $ renderText $ html_ $ do
+    head_ $ style >> title_ (toHtml title)
+    body_ $ do
+      term "nav" $ do
+        a_ [href_ "/"] "🏠 Cool Blog"
+        if authed
+          then do
+            a_ [href_ "/create"] "Create a Post"
+            with form_ [action_ "/logout", method_ "post", class_ "login-form"] $
+              input_ [type_ "submit", value_ "Log Out"]
+          else with form_ [action_ "/login", method_ "post", class_ "login-form"] $ do
+            input_ [name_ "username", placeholder_ "Username", type_ "text"]
+            input_ [name_ "password", placeholder_ "Password", type_ "password"]
+            input_ [type_ "submit"]
+      content
+  where style = link_ [Attribute "rel" "stylesheet", Attribute "href" "/style.css"]
 
 data Post = Post
           { markdown :: T.Text
@@ -162,11 +156,12 @@ render p@(Post markdown title date author) =
   case M.parse (pathToPost p) (T.toStrict markdown) of
     Left e -> Nothing
     Right doc -> Just $
-      with div_ [id_ (T.toStrict title)] $ do
-        with a_ [href_ (T.toStrict $ linkToPost p)] $
-          h1_ $ toHtml title
-        i_ $ toHtml $ "By " <> author <> ", " <> dateStr
-        br_ []
+      with article_ [id_ (T.toStrict title)] $ do
+        header_ $ do
+          with a_ [href_ (T.toStrict $ linkToPost p)] $
+            h1_ $ toHtml title
+          address_ $ "By " >> toHtml author
+          with time_ [datetime_ (T.toStrict $ T.pack (show date))] $ toHtml dateStr
         M.render (M.useExtensions extensions doc)
   where extensions = [M.ghcSyntaxHighlighter, M.skylighting, M.footnotes]
         dateStr = T.pack $ formatTime defaultTimeLocale "%a %e %B %Y" date
