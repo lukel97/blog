@@ -11,6 +11,7 @@ import qualified Data.Map.Lazy as Map
 import Data.Maybe
 import Data.Ord
 import Data.IORef
+import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
@@ -24,6 +25,7 @@ import Lucid.Base
 import System.Directory
 import System.FilePath
 import System.Random
+import System.IO.Error
 import Network.HTTP.Types
 
 type Sessions = Map.Map T.Text T.Text
@@ -68,6 +70,7 @@ logins = Map.fromList
 main :: IO ()
 main = do
   preserve <- mkPreserve mempty
+  createDirectory "posts" `catch` (\e -> unless (isAlreadyExistsError e) (throw e))
   scottyT 3000 preserve $ do
     get "/style.css" $ file "style.css"
 
