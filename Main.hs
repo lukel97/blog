@@ -29,6 +29,7 @@ import Network.HTTP.Types
 type Sessions = Map.Map T.Text T.Text
 type ActionM = ActionT T.Text (S.StateT Sessions IO)
 
+-- | Checks if the user is logged in
 loggedIn :: ActionM Bool
 loggedIn = do
   mCookie <- getCookie "session"
@@ -36,6 +37,7 @@ loggedIn = do
     Nothing -> return False
     Just cookie -> Map.member (T.fromStrict cookie) <$> lift S.get
 
+-- | Returns the current username
 currentUser :: ActionM (Maybe T.Text)
 currentUser = do
   mCookie <- getCookie "session"
@@ -80,19 +82,23 @@ main = do
             textarea_ [name_ "body", placeholder_ "# Your markdown here"] ""
             br_ []
             input_ [type_ "submit", value_ "Post"]
-        else status unauthorized401
+        else do
+          text "You're not logged in"
+          status unauthorized401
 
     post "/create" $ do
       t <- param "title"
       b <- param "body"
-      p <- createPost b t
+      p <- createPost t b
       redirect (linkToPost p)
 
     post "/login" $ do
       username <- param "username"
       password <- param "password"
       if Map.lookup username logins /= Just password
-        then status unauthorized401
+        then do
+          text "Invalid username and/or password"
+          status unauthorized401
         else do
           session <- T.pack . show <$> liftIO (randomIO :: IO Int)
           lift $ S.modify (Map.insert session username)
@@ -172,8 +178,14 @@ linkToPost p = T.pack $ "/posts" </> kebab (T.unpack (title p))
 pathToPost :: Post -> FilePath
 pathToPost p = "posts" </> kebab (T.unpack (title p))
 
-createPost :: T.Text -> T.Text -> ActionM Post
-createPost md title = do
+-- | Creates and saves a new post
+createPost :: T.Text
+           -- ^ The title of the post
+           -> T.Text
+           -- ^ The markdown body
+           -> ActionM Post
+           -- ^ The freshly created post
+createPost title md = do
   author <- do
     ma <- currentUser
     case ma of
