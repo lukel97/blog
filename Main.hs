@@ -4,7 +4,6 @@ module Main where
 import Web.Scotty.Cookie
 import Web.Scotty.Trans
 import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.IO as T
 import Data.List
 import Data.Time
 import qualified Data.Map.Lazy as Map
@@ -31,6 +30,25 @@ import Network.HTTP.Types
 type Sessions = Map.Map T.Text T.Text
 type ActionM = ActionT T.Text (S.StateT Sessions IO)
 
+-- | Makes a function that carries over the state from one
+-- request to the next
+mkPreserve :: s -> IO ((S.StateT s IO) a -> IO a)
+mkPreserve initS = do
+  ref <- newIORef initS
+  return $ \f -> do
+    s <- readIORef ref
+    (x, s') <- S.runStateT f s
+    writeIORef ref s'
+    return x
+
+-- TODO: Use hashes
+logins :: Map.Map T.Text T.Text
+logins = Map.fromList
+           [ ("luke", "pass")
+           , ("dave", "abcd")
+           , ("antonia", "1234")
+           , ("owen", "haskell")
+           ]
 -- | Checks if the user is logged in
 loggedIn :: ActionM Bool
 loggedIn = do
@@ -46,26 +64,6 @@ currentUser = do
   case mCookie of
     Nothing -> return Nothing
     Just cookie -> Map.lookup (T.fromStrict cookie) <$> lift S.get
-
--- | Makes a function that carries over the state from one
--- request to the next
-mkPreserve :: s -> IO ((S.StateT s IO) a -> IO a)
-mkPreserve s = do
-  ref <- newIORef s
-  return $ \f -> do
-    s <- readIORef ref
-    (x, s') <- S.runStateT f s
-    writeIORef ref s'
-    return x
-
--- TODO: Use hashes
-logins :: Map.Map T.Text T.Text
-logins = Map.fromList
-           [ ("luke", "pass")
-           , ("dave", "abcd")
-           , ("antonia", "1234")
-           , ("owen", "haskell")
-           ]
 
 main :: IO ()
 main = do
@@ -112,9 +110,9 @@ main = do
 
     get "/" $ do
       posts <- liftIO $ do
-        files <- listDirectory "posts"
-        posts <- catMaybes <$> mapM load files
-        return $ take 5 $ sortOn (Down . date) posts
+        fps <- listDirectory "posts"
+        posts <- catMaybes <$> mapM load fps
+        return $ take 5 $ sortOn (Down . postDate) posts
       template "Cool blog" $ sequence (mapMaybe render posts)
 
     get "/posts/:post" $ do
@@ -122,10 +120,9 @@ main = do
       mPost <- liftIO (load name)
       case mPost of
         Nothing -> status notFound404
-        Just post ->
-          case render post of
-            Nothing -> status internalServerError500
-            Just content -> template (title post) content
+        Just p -> case render p of
+          Nothing -> status internalServerError500
+          Just content -> template (postTitle p) content
 
 template :: T.Text -> Html a -> ActionM ()
 template title content = do
@@ -148,22 +145,22 @@ template title content = do
   where style = link_ [Attribute "rel" "stylesheet", Attribute "href" "/style.css"]
 
 data Post = Post
-          { markdown :: T.Text
-          , title    :: T.Text
-          , date     :: UTCTime
-          , author   :: T.Text
+          { postBody     :: T.Text
+          , postTitle    :: T.Text
+          , postDate     :: UTCTime
+          , postAuthor   :: T.Text
           } deriving (Read, Show)
 
 load :: String -> IO (Maybe Post)
 load name = do
-  let file = "posts" </> name
-  guard =<< doesFileExist file
-  readMaybe <$> readFile file
+  let fp = "posts" </> name
+  guard =<< doesFileExist fp
+  readMaybe <$> readFile fp
 
 render :: Post -> Maybe (Html ())
 render p@(Post markdown title date author) =
   case M.parse (pathToPost p) (T.toStrict markdown) of
-    Left e -> Nothing
+    Left _ -> Nothing
     Right doc -> Just $
       article_ [id_ (T.toStrict title)] $ do
         header_ $ do
@@ -176,10 +173,10 @@ render p@(Post markdown title date author) =
         dateStr = T.pack $ formatTime defaultTimeLocale "%a %e %B %Y" date
 
 linkToPost :: Post -> T.Text
-linkToPost p = T.pack $ "/posts" </> kebab (T.unpack (title p))
+linkToPost p = T.pack $ "/posts" </> kebab (T.unpack (postTitle p))
 
 pathToPost :: Post -> FilePath
-pathToPost p = "posts" </> kebab (T.unpack (title p))
+pathToPost p = "posts" </> kebab (T.unpack (postTitle p))
 
 -- | Creates and saves a new post
 createPost :: T.Text
@@ -188,13 +185,13 @@ createPost :: T.Text
            -- ^ The markdown body
            -> ActionM Post
            -- ^ The freshly created post
-createPost title md = do
-  author <- do
+createPost title markdown = do
+  auth <- do
     ma <- currentUser
     case ma of
       Just a -> return a
       Nothing -> raise "Not logged in"
   curTime <- liftIO getCurrentTime
-  let p = Post md title curTime author
+  let p = Post markdown title curTime auth
   liftIO $ writeFile (pathToPost p) (show p)
   return p
