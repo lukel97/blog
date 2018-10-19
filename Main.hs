@@ -109,10 +109,7 @@ main = do
     post "/logout" $ deleteCookie "session" >> redirect "/"
 
     get "/" $ do
-      posts <- liftIO $ do
-        fps <- listDirectory "posts"
-        posts <- catMaybes <$> mapM load fps
-        return $ take 5 $ sortOn (Down . postDate) posts
+      posts <- take 5 <$> liftIO loadAll
       template "Cool blog" $ sequence (mapMaybe render posts)
 
     get "/posts/:post" $ do
@@ -123,6 +120,14 @@ main = do
         Just p -> case render p of
           Nothing -> status internalServerError500
           Just content -> template (postTitle p) content
+
+    get "/author/:author" $ do
+      author <- param "author"
+      posts <- filter ((== author) . postAuthor) <$> liftIO loadAll
+      let title = "Posts by " <> author
+      template title $ do
+        h1_ (toHtml title)
+        sequence (mapMaybe render posts)
 
 template :: T.Text -> Html a -> ActionM ()
 template title content = do
@@ -151,6 +156,12 @@ data Post = Post
           , postAuthor   :: T.Text
           } deriving (Read, Show)
 
+loadAll :: IO [Post]
+loadAll = do
+  fps <- listDirectory "posts"
+  posts <- catMaybes <$> mapM load fps
+  return $ sortOn (Down . postDate) posts
+
 load :: String -> IO (Maybe Post)
 load name = do
   let fp = "posts" </> name
@@ -166,7 +177,8 @@ render p@(Post markdown title date author) =
         header_ $ do
           a_ [href_ (T.toStrict $ linkToPost p)] $
             h1_ $ toHtml title
-          address_ $ "By " >> toHtml author
+          a_ [href_ (T.toStrict $ "/author/" <> postAuthor p)] $
+            address_ ("By " >> toHtml author)
           time_ [datetime_ (T.toStrict $ T.pack (show date))] $ toHtml dateStr
         M.render (M.useExtensions extensions doc)
   where extensions = [M.ghcSyntaxHighlighter, M.skylighting, M.footnotes]
