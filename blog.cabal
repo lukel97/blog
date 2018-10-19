@@ -9,6 +9,9 @@ category: Web
 build-type: Simple
 extra-source-files:
     CHANGELOG.md
+    README.md
+data-files:
+    style.css
 
 executable blog
     main-is: Main.hs
